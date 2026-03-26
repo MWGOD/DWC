@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DRIP WEAR</title>
+<style>
+  *, *::before, *::after {
+    margin: 0; padding: 0; box-sizing: border-box;
+  }
+
+  html { height: 100%; }
+
+  body {
+    min-height: 100%;
+    background: #000;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    cursor: none;
+  }
+
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-track { background: #000; }
+  ::-webkit-scrollbar-thumb { background: #ff000033; }
+
+  /* ── Starfield canvas ── */
+  #starfield {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ── Scanlines overlay ── */
+  #scanlines {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent, transparent 2px,
+      rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px
+    );
+  }
+
+  /* ── Scene (fixed center) ── */
+  #scene {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  /* ── Logo wrapper ── */
+  #logo-wrapper {
+    position: relative;
+    pointer-events: all;
+    perspective: 900px;
+  }
+
+  #logo-wrapper::after {
+    content: '';
+    position: absolute;
+    inset: -40px;
+    background: radial-gradient(ellipse at center, rgba(255,0,0,0.06) 0%, transparent 68%);
+    border-radius: 50%;
+    animation: aura 3.5s ease-in-out infinite;
+    pointer-events: none;
+    z-index: -1;
+  }
+  @keyframes aura {
+    0%, 100% { opacity: 0.5; transform: scale(0.96); }
+    50%       { opacity: 1;   transform: scale(1.04); }
+  }
+
+  #logo-inner {
+    will-change: transform;
+    transform-style: preserve-3d;
+    animation: floatAnim 4.5s ease-in-out infinite;
+  }
+  #logo-inner.is-hovering {
+    animation: none;
+  }
+  @keyframes floatAnim {
+    0%, 100% { transform: translateY(0px); }
+    50%       { transform: translateY(-12px); }
+  }
+
+  #logo-img {
+    display: block;
+    width: clamp(260px, 42vw, 500px);
+    height: auto;
+    filter: drop-shadow(0 0 8px rgba(255,0,0,0.65))
+            drop-shadow(0 0 24px rgba(255,0,0,0.35));
+    transition: filter 0.35s ease;
+    user-select: none;
+    -webkit-user-drag: none;
+    pointer-events: none;
+  }
+  #logo-wrapper:hover #logo-img {
+    filter: drop-shadow(0 0 14px #ff0000)
+            drop-shadow(0 0 40px rgba(255,0,0,0.65))
+            drop-shadow(0 0 80px rgba(255,0,0,0.3));
+  }
+
+  /* ── Scroll indicator ── */
+  #scroll-ind {
+    position: fixed;
+    bottom: 36px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    opacity: 1;
+    transition: opacity 0.5s ease;
+    animation: indBob 2.2s ease-in-out infinite;
+  }
+  #scroll-ind.hidden {
+    opacity: 0 !important;
+    animation: none;
+  }
+  @keyframes indBob {
+    0%, 100% { transform: translateX(-50%) translateY(0);   }
+    50%       { transform: translateX(-50%) translateY(7px); }
+  }
+  #scroll-ind span {
+    color: rgba(255, 0, 0, 0.55);
+    font-size: 9px;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-weight: 300;
+    text-shadow: 0 0 10px rgba(255,0,0,0.4);
+  }
+  .arrow-down {
+    width: 11px;
+    height: 11px;
+    border-right: 1.5px solid rgba(255,0,0,0.5);
+    border-bottom: 1.5px solid rgba(255,0,0,0.5);
+    transform: rotate(45deg);
+  }
+
+  /* ── Discord button ── */
+  #discord-btn {
+    position: fixed;
+    bottom: 46px;
+    left: 50%;
+    transform: translateX(-50%) translateY(120px);
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 0.55s cubic-bezier(0.34, 1.56, 0.64, 1),
+      opacity   0.45s ease;
+  }
+  #discord-btn.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+    pointer-events: all;
+  }
+  #discord-btn a {
+    display: inline-block;
+    padding: 13px 40px;
+    background: transparent;
+    border: 1px solid #ff0000;
+    color: #ff0000;
+    text-decoration: none;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    text-shadow: 0 0 8px #ff0000, 0 0 18px rgba(255,0,0,0.5);
+    box-shadow: 0 0 14px rgba(255,0,0,0.25), inset 0 0 14px rgba(255,0,0,0.06);
+    transition: all 0.28s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  #discord-btn a::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, transparent 45%, rgba(255,0,0,0.07));
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  #discord-btn a:hover {
+    background: rgba(255,0,0,0.05);
+    box-shadow: 0 0 30px rgba(255,0,0,0.6),
+                0 0 70px rgba(255,0,0,0.3),
+                inset 0 0 24px rgba(255,0,0,0.1);
+    transform: scale(1.04);
+    letter-spacing: 6px;
+  }
+  #discord-btn a:hover::before { opacity: 1; }
+  #discord-btn a:active { transform: scale(0.97); }
+
+  /* ── Custom cursor ── */
+  #cursor {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    width: 26px;
+    height: 26px;
+    transform: translate(-50%, -50%);
+    will-change: left, top;
+    transition: width 0.18s, height 0.18s;
+    left: -100px;
+    top: -100px;
+  }
+  #cursor svg {
+    width: 100%;
+    height: 100%;
+    animation: curPulse 2s ease-in-out infinite;
+  }
+  @keyframes curPulse {
+    0%, 100% { filter: drop-shadow(0 0 3px #ff0000) drop-shadow(0 0 7px rgba(255,0,0,0.5)); }
+    50%       { filter: drop-shadow(0 0 6px #ff0000) drop-shadow(0 0 14px rgba(255,0,0,0.75)); }
+  }
+  #cursor.big { width: 34px; height: 34px; }
+
+  /* ── Scroll spacer ── */
+  #spacer {
+    height: 180vh;
+    pointer-events: none;
+    position: relative;
+    z-index: -1;
+  }
+
+  /* ── Mobile ── */
+  @media (max-width: 768px) {
+    body { cursor: auto; }
+    #cursor { display: none; }
+    #logo-img { width: clamp(220px, 80vw, 380px); }
+    #discord-btn a { padding: 12px 28px; font-size: 10px; }
+  }
+  @media (hover: none) {
+    body { cursor: auto; }
+    #cursor { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Starfield -->
+<canvas id="starfield"></canvas>
+
+<!-- Scanlines -->
+<div id="scanlines"></div>
+
+<!-- Main centered scene -->
+<div id="scene">
+  <div id="logo-wrapper">
+    <div id="logo-inner">
+      <img id="logo-img" src="logo.png" alt="Drip Wear Clothing">
+    </div>
+  </div>
+</div>
+
+<!-- Scroll indicator -->
+<div id="scroll-ind">
+  <span>Scroll</span>
+  <div class="arrow-down"></div>
+</div>
+
+<!-- Discord button -->
+<div id="discord-btn">
+  <a href="https://discord.gg/dwc" target="_blank" rel="noopener noreferrer">Join Our Discord</a>
+</div>
+
+<!-- Custom cursor -->
+<div id="cursor">
+  <svg viewBox="0 0 26 26" fill="none" xmlns="[w3.org](http://www.w3.org/2000/svg)">
+    <line x1="13" y1="0"  x2="13" y2="9"  stroke="#ff0000" stroke-width="1.3"/>
+    <line x1="13" y1="17" x2="13" y2="26" stroke="#ff0000" stroke-width="1.3"/>
+    <line x1="0"  y1="13" x2="9"  y2="13" stroke="#ff0000" stroke-width="1.3"/>
+    <line x1="17" y1="13" x2="26" y2="13" stroke="#ff0000" stroke-width="1.3"/>
+    <circle cx="13" cy="13" r="3.2" stroke="#ff0000" stroke-width="1.3"/>
+    <line x1="8"  y1="8"  x2="10" y2="8"  stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+    <line x1="8"  y1="8"  x2="8"  y2="10" stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+    <line x1="18" y1="8"  x2="16" y2="8"  stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+    <line x1="18" y1="8"  x2="18" y2="10" stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+    <line x1="8"  y1="18" x2="10" y2="18" stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+    <line x1="8"  y1="18" x2="8"  y2="16" stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+    <line x1="18" y1="18" x2="16" y2="18" stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+    <line x1="18" y1="18" x2="18" y2="16" stroke="#ff0000" stroke-width="0.9" opacity="0.55"/>
+  </svg>
+</div>
+
+<!-- Scroll spacer — makes page actually scrollable -->
+<div id="spacer"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const isMobile = () =>
+    window.matchMedia('(max-width:768px)').matches ||
+    window.matchMedia('(hover:none)').matches;
+
+  /* ════════════════════════════════════════
+     STARFIELD WITH CURSOR INTERACTION
+  ════════════════════════════════════════ */
+  const canvas = document.getElementById('starfield');
+  const ctx    = canvas.getContext('2d');
+  let W, H, stars = [];
+  const STAR_COUNT = 210;
+
+  // Live cursor position on screen (not normalised — used for proximity)
+  let rawMouseX = -9999, rawMouseY = -9999;
+  // Normalised mouse (0–1) for parallax
+  let mxN = 0.5, myN = 0.5;
+  // Smoothed parallax offset
+  let pxS = 0, pyS = 0;
+
+  function createStars() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    stars = [];
+    for (let i = 0; i < STAR_COUNT; i++) {
+      stars.push({
+        // Position
+        x: Math.random() * W,
+        y: Math.random() * H,
+        // Base size
+        r: Math.random() * 1.3 + 0.25,
+        // Alpha
+        baseAlpha:   Math.random() * 0.32 + 0.07,
+        // Primary slow breathe
+        flickFreq:   Math.random() * 0.55 + 0.18,
+        flickPhase:  Math.random() * Math.PI * 2,
+        flickAmp:    Math.random() * 0.22 + 0.06,
+        // Secondary fast stutter
+        stutterFreq: Math.random() * 5 + 2,
+        stutterPhase:Math.random() * Math.PI * 2,
+        stutterAmp:  Math.random() * 0.10,
+        // Glow pulse
+        glowFreq:    Math.random() * 0.38 + 0.12,
+        glowPhase:   Math.random() * Math.PI * 2,
+        // Parallax depth
+        depth:       Math.random() * 0.8 + 0.2,
+        // Random dim-pop offset so stars never all dim together
+        popOffset:   Math.random() * 12,
+        // Cursor influence — smoothed target and current
+        cursorBoost: 0,
+      });
+    }
+  }
+
+  /* Influence radius for cursor glow effect */
+  const CURSOR_RADIUS   = 120; // px
+  const CURSOR_RADIUS_SQ = CURSOR_RADIUS * CURSOR_RADIUS;
+
+  function drawStars(t) {
+    ctx.clearRect(0, 0, W, H);
+
+    // Smooth parallax
+    pxS += ((mxN - 0.5) * 24 - pxS) * 0.04;
+    pyS += ((myN - 0.5) * 24 - pyS) * 0.04;
+
+    for (let i = 0; i < stars.length; i++) {
+      const s = stars[i];
+
+      /* ── Flicker: primary breathe + fast stutter ── */
+      const flick   = Math.sin(t * s.flickFreq   * Math.PI * 2 + s.flickPhase)   * s.flickAmp;
+      const stutter = Math.sin(t * s.stutterFreq * Math.PI * 2 + s.stutterPhase) * s.stutterAmp;
+      let alpha = s.baseAlpha + flick + stutter;
+
+      /* ── Occasional dim-pop (staggered per star) ── */
+      const popCycle = (t + s.popOffset) % 9;
+      if (popCycle < 0.07) alpha *= 0.12;
+
+      alpha = Math.max(0.02, Math.min(1, alpha));
+
+      /* ── Cursor proximity boost ── */
+      const px = s.x + pxS * s.depth;
+      const py = s.y + pyS * s.depth;
+      const dxC = px - rawMouseX;
+      const dyC = py - rawMouseY;
+      const distSq = dxC * dxC + dyC * dyC;
+
+      // Target boost: smooth falloff based on distance
+      let targetBoost = 0;
+      if (distSq < CURSOR_RADIUS_SQ) {
+        const dist = Math.sqrt(distSq);
+        // Falloff: 1 at center → 0 at edge, smoothstep feel
+        const t01 = 1 - dist / CURSOR_RADIUS;
+        targetBoost = t01 * t01 * 0.75; // max +0.75 alpha boost
+      }
+
+      // Smooth the boost so stars ramp up/down gently
+      s.cursorBoost += (targetBoost - s.cursorBoost) * 0.12;
+
+      const finalAlpha = Math.min(1, alpha + s.cursorBoost);
+      // Also slightly enlarge nearby stars
+      const boostRadius = 1 + s.cursorBoost * 1.4;
+
+      /* ── Glow radius pulse ── */
+      const glowPulse = 1 + Math.sin(t * s.glowFreq * Math.PI * 2 + s.glowPhase) * 0.28;
+      const glowR = s.r * 5.5 * glowPulse * boostRadius;
+
+      /* ── Draw glow halo ── */
+      const g = ctx.createRadialGradient(px, py, 0, px, py, glowR);
+      // Nearby stars get a brighter, slightly warmer halo
+      const coreR = Math.round(255);
+      const coreG = Math.round(30 + s.cursorBoost * 30);
+      g.addColorStop(0,    `rgba(${coreR},${coreG},30,${finalAlpha})`);
+      g.addColorStop(0.35, `rgba(255,0,0,${finalAlpha * 0.38})`);
+      g.addColorStop(1,    'rgba(255,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(px, py, glowR, 0, Math.PI * 2);
+      ctx.fillStyle = g;
+      ctx.fill();
+
+      /* ── Draw core dot ── */
+      ctx.beginPath();
+      ctx.arc(px, py, s.r * boostRadius, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,110,110,${Math.min(finalAlpha * 2.2, 1)})`;
+      ctx.fill();
+    }
+  }
+
+  /* ════════════════════════════════════════
+     CUSTOM CURSOR
+  ════════════════════════════════════════ */
+  const cursorEl = document.getElementById('cursor');
+  let cx = -200, cy = -200, ax = -200, ay = -200;
+
+  if (!isMobile()) {
+    document.addEventListener('mousemove', e => {
+      ax = e.clientX;
+      ay = e.clientY;
+      rawMouseX = e.clientX;
+      rawMouseY = e.clientY;
+      mxN = e.clientX / window.innerWidth;
+      myN = e.clientY / window.innerHeight;
+    });
+
+    document.querySelectorAll('a, button').forEach(el => {
+      el.addEventListener('mouseenter', () => cursorEl.classList.add('big'));
+      el.addEventListener('mouseleave', () => cursorEl.classList.remove('big'));
+    });
+  }
+
+  document.addEventListener('touchmove', e => {
+    mxN = e.touches[0].clientX / window.innerWidth;
+    myN = e.touches[0].clientY / window.innerHeight;
+  }, { passive: true });
+
+  function stepCursor() {
+    if (!isMobile()) {
+      cx += (ax - cx) * 0.16;
+      cy += (ay - cy) * 0.16;
+      cursorEl.style.left = cx + 'px';
+      cursorEl.style.top  = cy + 'px';
+    }
+  }
+
+  /* ════════════════════════════════════════
+     LOGO 3D TILT
+  ════════════════════════════════════════ */
+  const logoWrapper = document.getElementById('logo-wrapper');
+  const logoInner   = document.getElementById('logo-inner');
+  let tx = 0, ty = 0, ttx = 0, tty = 0, hovLogo = false;
+
+  logoWrapper.addEventListener('mouseenter', () => {
+    hovLogo = true;
+    logoInner.classList.add('is-hovering');
+  });
+  logoWrapper.addEventListener('mouseleave', () => {
+    hovLogo = false;
+    ttx = 0; tty = 0;
+    logoInner.classList.remove('is-hovering');
+  });
+  logoWrapper.addEventListener('mousemove', e => {
+    const rect = logoWrapper.getBoundingClientRect();
+    const dx = (e.clientX - (rect.left + rect.width  / 2)) / (rect.width  / 2);
+    const dy = (e.clientY - (rect.top  + rect.height / 2)) / (rect.height / 2);
+    ttx =  dy * 16;
+    tty = -dx * 16;
+  });
+
+  function stepTilt() {
+    tx += (ttx - tx) * 0.09;
+    ty += (tty - ty) * 0.09;
+    const tiny = Math.abs(tx) < 0.05 && Math.abs(ty) < 0.05;
+    if (hovLogo) {
+      logoInner.style.transform =
+        `perspective(900px) rotateX(${tx}deg) rotateY(${ty}deg) scale3d(1.04,1.04,1.04)`;
+    } else if (!tiny) {
+      logoInner.style.transform =
+        `perspective(900px) rotateX(${tx}deg) rotateY(${ty}deg)`;
+    } else {
+      logoInner.style.transform = '';
+    }
+  }
+
+  /* ════════════════════════════════════════
+     SCROLL → BUTTON + SCROLL INDICATOR
+  ════════════════════════════════════════ */
+  const discBtn   = document.getElementById('discord-btn');
+  const scrollInd = document.getElementById('scroll-ind');
+  let btnVisible  = false;
+  const THRESHOLD = 50;
+
+  function onScroll() {
+    const sy = window.scrollY || window.pageYOffset;
+    if (sy > THRESHOLD && !btnVisible) {
+      btnVisible = true;
+      discBtn.classList.add('show');
+      scrollInd.classList.add('hidden');
+    } else if (sy <= THRESHOLD && btnVisible) {
+      btnVisible = false;
+      discBtn.classList.remove('show');
+      scrollInd.classList.remove('hidden');
+    }
+  }
+
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll(); // run on load
+
+  /* ════════════════════════════════════════
+     MAIN RAF LOOP
+  ════════════════════════════════════════ */
+  let startTime = null;
+  function loop(ts) {
+    if (!startTime) startTime = ts;
+    const t = (ts - startTime) / 1000;
+    drawStars(t);
+    stepCursor();
+    stepTilt();
+    requestAnimationFrame(loop);
+  }
+
+  /* ════════════════════════════════════════
+     RESIZE
+  ════════════════════════════════════════ */
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(createStars, 150);
+  });
+
+  /* ── Boot ── */
+  createStars();
+  requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
